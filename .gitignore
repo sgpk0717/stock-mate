@@ -1,0 +1,12 @@
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Screenshots / temp files
+*.png
+chart-snapshot.md
+CLAUDE_SUMMARY.md

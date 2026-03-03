@@ -1,0 +1,6 @@
+[submodule "stock-mate-backend"]
+	path = stock-mate-backend
+	url = https://github.com/sgpk0717/stock-mate-backend.git
+[submodule "stock-mate-frontend"]
+	path = stock-mate-frontend
+	url = https://github.com/sgpk0717/stock-mate-frontend.git
