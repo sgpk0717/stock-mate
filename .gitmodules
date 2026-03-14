@@ -4,3 +4,6 @@
 [submodule "stock-mate-frontend"]
 	path = stock-mate-frontend
 	url = https://github.com/sgpk0717/stock-mate-frontend.git
+[submodule "stock-mate-data-pump"]
+	path = stock-mate-data-pump
+	url = https://github.com/sgpk0717/stock-mate-data-pump.git
