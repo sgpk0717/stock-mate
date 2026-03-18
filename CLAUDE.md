@@ -184,6 +184,9 @@ API 키, Secret 토큰 등은 절대 코드 내에 하드코딩하지 않고 환
 - fastmcp >= 2.0 (MCP Data Bus SSE 서버)
 - apscheduler >= 3.10 (크론잡 스케줄러 — 워크플로우/일일 배치)
 - python-telegram-bot >= 21.0 (텔레그램 알림 봇)
+- redis >= 5.0 (async Redis — IPC)
+- psutil >= 5.9 (프로세스 모니터링)
+- google-genai >= 1.0 (Gemini API — Anthropic 보조)
 
 ### Data Pump (`stock-mate-data-pump/`)
 - Python 3.11 (32-bit), PyQt5 (COM 이벤트 루프)
@@ -242,7 +245,7 @@ stock-mate/
 │   │   │   └── stock_master.py        ← 종목 메모리 캐시 (symbol→name/market)
 │   │   ├── models/base.py             ← SQLAlchemy 모델 6개
 │   │   ├── schemas/                   ← 5개 (health, account, position, order, stock)
-│   │   ├── routers/                   ← 19개 (아래 REST API 섹션 참조)
+│   │   ├── routers/                   ← 22개 (아래 REST API 섹션 참조)
 │   │   ├── services/
 │   │   │   ├── candle_service.py      ← 멀티타임프레임 캔들 쿼리 (1m~1M)
 │   │   │   ├── candle_writer.py       ← 캔들/틱 데이터 DB 저장
@@ -287,7 +290,7 @@ stock-mate/
 │   │   │   ├── embedder.py            ← ko-sroberta-multitask 임베딩 (768-dim)
 │   │   │   ├── search.py              ← 코사인 유사도 기반 종목 검색
 │   │   │   └── clusterer.py           ← K-means 섹터 클러스터링
-│   │   ├── alpha/                     ← 알파 팩터 탐색 (26개 파일)
+│   │   ├── alpha/                     ← 알파 팩터 탐색 (26개 파일 + niche 분류)
 │   │   │   ├── miner.py              ← EvolutionaryAlphaMiner (Claude 가설 + 변이 루프)
 │   │   │   ├── evolution_engine.py    ← EvolutionEngine (DB 영속 모집단, UCB1, 3-Phase)
 │   │   │   ├── evolution.py           ← SymPy AST 교차/변이/토너먼트 선택
@@ -313,17 +316,21 @@ stock-mate/
 │   │   │   ├── portfolio.py           ← 복합 팩터 구성/상관행렬
 │   │   │   ├── models.py             ← AlphaMiningRun, AlphaFactor, AlphaExperience
 │   │   │   └── schemas.py            ← Pydantic 스키마
-│   │   ├── simulation/                ← ABM 금융 시뮬레이션 (5개 파일)
+│   │   ├── simulation/                ← ABM 금융 시뮬레이션 (9개 파일)
 │   │   │   ├── orderbook.py           ← LOB 엔진 (heapq, price-time priority)
 │   │   │   ├── agents.py             ← 이질적 에이전트 6종
 │   │   │   ├── exchange.py            ← VirtualExchange (시나리오 4종 + 커스텀)
+│   │   │   ├── scenarios.py           ← 시나리오 정의 + Claude 커스텀 시나리오
+│   │   │   ├── anonymizer_enhanced.py ← 강화된 개체명 익명화
+│   │   │   ├── models.py             ← SQLAlchemy 모델 (StressTestRun 등)
+│   │   │   ├── schemas.py            ← Pydantic 스키마
 │   │   │   └── runner.py             ← 비동기 시뮬레이션 실행기
-│   │   ├── mcp/                       ← MCP Data Bus (4개 파일)
+│   │   ├── mcp/                       ← MCP Data Bus (5개 파일)
 │   │   │   ├── server.py             ← FastMCP 서버 (24 tools + 1 resource)
 │   │   │   ├── server_standalone.py  ← MCP 독립 실행 엔트리포인트 (stockmate-mcp 컨테이너용)
 │   │   │   ├── governance.py          ← 수량 제한, 행위 화이트리스트, 감사
 │   │   │   └── bridge.py             ← SSE transport 브릿지 (inline 모드용)
-│   │   ├── scheduler/                 ← 일일 배치 수집 스케줄러 (4파일 + collectors/ 7파일)
+│   │   ├── scheduler/                 ← 일일 배치 수집 스케줄러 (4파일 + collectors/ 8파일)
 │   │   │   ├── daily_scheduler.py     ← 싱글턴 스케줄러 (asyncio.Task 기반)
 │   │   │   ├── circuit_breaker.py     ← 서킷 브레이커 패턴
 │   │   │   ├── schemas.py             ← CollectionResult, JobStatus, TriggerRequest
@@ -333,6 +340,7 @@ stock-mate/
 │   │   │       ├── news_batch.py      ← 네이버/DART/BigKinds 뉴스 배치 수집
 │   │   │       ├── margin_short.py    ← pykrx 신용잔고/공매도 수집
 │   │   │       ├── investor.py        ← pykrx 투자자별 매매동향 수집
+│   │   │       ├── dart_financial.py  ← DART 재무 데이터 배치 수집
 │   │   │       └── tick_rotation.py   ← 틱 순환 스케줄 JSON 생성
 │   │   ├── workflow/                  ← 자동매매 워크플로우 FSM (12파일)
 │   │   │   ├── orchestrator.py        ← DailyWorkflowOrchestrator (FSM + APScheduler)
@@ -350,12 +358,16 @@ stock-mate/
 │   │   │   ├── bot.py                ← @rexooj_bot 알림 전송 (발송 자동 기록)
 │   │   │   ├── models.py             ← TelegramMessageLog 모델
 │   │   │   └── schemas.py            ← TelegramLogResponse 스키마
-│   │   └── trading/                   ← KIS API 실거래 (5개 파일)
+│   │   └── trading/                   ← KIS API 실거래 (10개 파일)
 │   │       ├── context.py             ← TradingContext (backtest→paper→real 전환)
 │   │       ├── token_bucket.py        ← Token Bucket Rate Limiter (15req/s)
 │   │       ├── kis_client.py          ← KIS REST 클라이언트 (토큰 자동 갱신)
 │   │       ├── kis_order.py           ← 매수/매도/취소/정정 주문
-│   │       └── live_runner.py         ← 실시간 전략 러너 (30초 시그널 체크)
+│   │       ├── live_runner.py         ← 실시간 전략 러너 (30초 시그널 체크)
+│   │       ├── order_manager.py       ← 주문 생명주기 관리 (TTL, 취소, 재주문)
+│   │       ├── sim_engine.py          ← 모의 체결 엔진 (KIS 모의투자 대체)
+│   │       ├── log_writer.py          ← 매매 로그 DB 기록
+│   │       └── tick_size.py           ← 호가 단위 계산 (가격대별)
 │   ├── scripts/
 │   │   ├── seed_stock_masters.py      ← pykrx → stock_masters (KRX 3843개)
 │   │   ├── seed_candles.py            ← pykrx → stock_candles (일봉/분봉)
@@ -373,19 +385,19 @@ stock-mate/
 │   │   ├── verify_3phase.py           ← 3-Phase 파이프라인 검증
 │   │   ├── test_factory_params.py     ← 팩토리 파라미터 테스트
 │   │   └── claude_code_agent.py       ← Claude Code 에이전트 스크립트
-│   ├── alembic/                       ← DB 마이그레이션 (24개 버전)
+│   ├── alembic/                       ← DB 마이그레이션 (29개 버전)
 │   ├── docs/ARCHITECTURE.md           ← 상세 설계 문서
 │   ├── docker-compose.yml             ← 5서비스 (api + worker + mcp + redis + db)
 │   ├── Dockerfile
-│   ├── requirements.txt               ← 27개 패키지 (redis 추가)
+│   ├── requirements.txt               ← 30개 패키지 (redis, psutil, google-genai 추가)
 │   └── .env.example
 │
 ├── stock-mate-frontend/               ← React 프론트엔드 (별도 git repo)
 │   ├── src/
 │   │   ├── index.css                  ← 디자인 시스템 색상 변수 (OKLCH)
 │   │   ├── main.tsx                   ← QueryClientProvider 래핑
-│   │   ├── App.tsx                    ← React Router (12개 페이지)
-│   │   ├── pages/                     ← 12개 페이지
+│   │   ├── App.tsx                    ← React Router (15개 페이지)
+│   │   ├── pages/                     ← 15개 페이지
 │   │   │   ├── Dashboard.tsx          ← 홈 — 계좌 요약, 포지션, 틱 차트
 │   │   │   ├── ChartPage.tsx          ← 3컬럼 트레이딩 뷰 (캔들+호가+체결+뉴스)
 │   │   │   ├── OrderPage.tsx          ← 모의투자 주문 (폼+호가+보류/체결)
@@ -395,23 +407,27 @@ stock-mate/
 │   │   │   ├── TradingPage.tsx        ← 자동매매 (KIS 계좌+컨텍스트+세션+매매로그)
 │   │   │   ├── AlphaLabPage.tsx       ← 알파 팩터 탐색 (마이닝+팩터목록+팩토리+인과검증)
 │   │   │   ├── SimulationPage.tsx     ← ABM 시뮬레이션 (2탭: 설정/MCP 대시보드)
+│   │   │   ├── SimReplayPage.tsx      ← 시뮬레이션 리플레이/분석
 │   │   │   ├── WorkflowPage.tsx       ← 워크플로우 FSM 대시보드 (상태/히스토리/이벤트)
 │   │   │   ├── TelegramLogPage.tsx    ← 텔레그램 발송 내역 (카테고리/상태 필터, 페이지네이션)
+│   │   │   ├── DataExplorerPage.tsx   ← 데이터 커버리지 감사/분석 대시보드
+│   │   │   ├── SystemMapPage.tsx      ← 시스템 아키텍처/상태 시각화
 │   │   │   └── SettingsPage.tsx       ← Paper/Real 전환, 감시 종목
 │   │   ├── components/
 │   │   │   ├── layout/                ← AppLayout, Header, Sidebar
 │   │   │   ├── chart/                 ← CandleChart, TickChart, MASettingsPanel
-│   │   │   ├── backtest/              ← 9개 (StrategyChat, Chat, Config, Progress, SummaryCards, EquityCurve, TradeTable, History, AgentAnalysis)
+│   │   │   ├── backtest/              ← 10개 (StrategyChat, Chat, Config, Progress, SummaryCards, EquityCurve, TradeTable, TradeDetail, History, AgentAnalysis)
 │   │   │   ├── order/                 ← OrderBook, OrderForm
 │   │   │   ├── stock/                 ← StockSearch (cmdk), SectorSearch (임베딩)
 │   │   │   ├── trade/                 ← TradeHistory
 │   │   │   ├── news/                  ← SentimentBadge, NewsSentimentChart, NewsPanel
-│   │   │   ├── trading/               ← ModeSwitch, LiveStatus, ContextPanel
-│   │   │   ├── alpha/                 ← 7개 (MiningConfig, FactorList, FactorDetail, FactoryPanel, CausalResult, CorrelationMatrix, ExperienceLog)
+│   │   │   ├── trading/               ← 5개 (ModeSwitch, LiveStatus, ContextPanel, SessionCard, TradeJournalChart)
+│   │   │   ├── alpha/                 ← 14개 (MineConfig, FactorTable, FactorDetail, FactoryControl, FailureAnalysis, MineHistory, MineProgress, MiningLog, CausalBadge, CausalDAGView, CompositeFactorBuilder, FactorChat, CorrelationHeatmap, FactorLineageTree)
 │   │   │   ├── simulation/            ← 7개 (Config, Progress, PriceChart, LOB, Metrics, History, McpDashboard)
-│   │   │   └── ui/                    ← 18개 shadcn/ui 컴포넌트 (+ color-picker)
+│   │   │   ├── data-explorer/         ← 11개 (CandleCoverage, CollectionOverview, DartFinancials, DataGaps, DateRangePicker, InvestorTrading, MarginShort, NewsSentiment, Pagination, ProgramTrading, LoadingSpinner)
+│   │   │   └── ui/                    ← 22개 shadcn/ui 컴포넌트 (+ color-picker, glossary-text, term)
 │   │   ├── hooks/
-│   │   │   ├── queries/               ← TanStack Query 훅 15파일 + index.ts
+│   │   │   ├── queries/               ← TanStack Query 훅 16파일 + index.ts
 │   │   │   │   ├── use-account.ts, use-positions.ts, use-orders.ts
 │   │   │   │   ├── use-ticks.ts       ← useCandles, useTicks, useStockList
 │   │   │   │   ├── use-paper.ts       ← 모의투자 6개 훅
@@ -423,7 +439,9 @@ stock-mate/
 │   │   │   │   ├── use-alpha.ts       ← 알파 팩터 탐색 훅
 │   │   │   │   ├── use-simulation.ts  ← ABM 시뮬레이션 훅
 │   │   │   │   ├── use-workflow.ts    ← 워크플로우 FSM 훅
-│   │   │   │   └── use-telegram.ts    ← 텔레그램 로그 조회 훅
+│   │   │   │   ├── use-telegram.ts    ← 텔레그램 로그 조회 훅
+│   │   │   │   ├── use-data-explorer.ts ← 데이터 탐색기 훅
+│   │   │   │   └── use-system.ts      ← 시스템 상태 훅
 │   │   │   ├── use-websocket.ts       ← useTickStream, useOrderBookStream
 │   │   │   └── use-chart-layout.ts    ← 차트 드래그 리사이즈
 │   │   ├── stores/
@@ -440,11 +458,14 @@ stock-mate/
 │   │   │   ├── alpha.ts              ← 알파 팩터 탐색 API
 │   │   │   ├── simulation.ts         ← ABM 시뮬레이션 API
 │   │   │   ├── workflow.ts           ← 워크플로우 FSM API
-│   │   │   └── telegram.ts           ← 텔레그램 로그 API
+│   │   │   ├── telegram.ts           ← 텔레그램 로그 API
+│   │   │   ├── data-explorer.ts      ← 데이터 탐색기 API
+│   │   │   └── system.ts             ← 시스템 상태 API
 │   │   ├── lib/
 │   │   │   ├── utils.ts              ← cn() (clsx + tailwind-merge)
 │   │   │   ├── format.ts             ← formatKRW, formatNumber, formatPercent
-│   │   │   └── interval.ts           ← intervalToSeconds
+│   │   │   ├── interval.ts           ← intervalToSeconds
+│   │   │   └── glossary.ts           ← 용어 사전 (GlossaryText 컴포넌트용)
 │   │   └── types/
 │   │       ├── index.ts              ← 32개+ 인터페이스 (Stock, Account, Trading 등)
 │   │       ├── agent.ts              ← AgentSession, StrategySchema, ToolResult
@@ -452,7 +473,8 @@ stock-mate/
 │   │       ├── alpha.ts              ← AlphaFactor, MiningRun, FactoryStatus
 │   │       ├── simulation.ts         ← SimulationRun, Scenario, ABM 관련
 │   │       ├── workflow.ts           ← WorkflowRun, WorkflowEvent, FSM 상태
-│   │       └── telegram.ts           ← TelegramLog, TelegramLogResponse
+│   │       ├── telegram.ts           ← TelegramLog, TelegramLogResponse
+│   │       └── data-explorer.ts      ← DataExplorer 관련 타입
 │   ├── .env                           ← VITE_API_URL, VITE_WS_URL
 │   ├── components.json                ← shadcn/ui 설정
 │   └── vite.config.ts
@@ -513,6 +535,8 @@ docker restart stockmate-mcp      # MCP만 재시작
 | `ZMQ_PORT` | `5555` | ZMQ 포트 |
 | `USE_SIMULATOR` | `false` | `true`=틱 시뮬레이터, `false`=키움 ZMQ |
 | `ANTHROPIC_API_KEY` | — | Claude API 키 (AI 전략/감성 분석) |
+| `GEMINI_API_KEY` | — | Google Gemini API 키 (보조 LLM) |
+| `GEMINI_MODEL` | `gemini-3.1-flash-lite-preview` | Gemini 모델 |
 | `AGENT_MODEL` | `claude-sonnet-4-6` | 에이전트 모델 |
 | `AGENT_SESSION_TTL_MINUTES` | `30` | 에이전트 세션 TTL |
 | `AGENT_MAX_TOKENS` | `4000` | 에이전트 최대 토큰 |
@@ -527,18 +551,19 @@ docker restart stockmate-mcp      # MCP만 재시작
 | `NEWS_BATCH_SIZE` | `10` | Claude 배치 분석 단위 |
 | `ALPHA_IC_THRESHOLD_PASS` | `0.03` | 알파 팩터 IC 통과 기준 |
 | `ALPHA_MAX_MUTATION_DEPTH` | `5` | 변이 재시도 최대 깊이 |
-| `ALPHA_POPULATION_SIZE` | `500` | 진화 엔진 모집단 크기 |
+| `ALPHA_POPULATION_SIZE` | `100` | 진화 엔진 모집단 크기 (5분봉 OOM 방지, 점진적 증가) |
 | `ALPHA_ELITE_PCT` | `0.05` | 엘리트 보존 비율 |
 | `ALPHA_AST_MUTATION_RATIO` | `0.92` | AST 연산자 비율 |
 | `ALPHA_LLM_MUTATION_RATIO` | `0.08` | LLM 연산자 비율 (Claude "doping") |
 | `ALPHA_LLM_MAX_CONCURRENT` | `20` | LLM 동시 호출 수 (Tier 3 기준) |
 | `ALPHA_LLM_RETRY_MAX` | `2` | 429/timeout 최대 재시도 |
-| `ALPHA_EVAL_BATCH_SIZE` | `50` | 배치 IC 평가 크기 |
+| `ALPHA_EVAL_BATCH_SIZE` | `5` | 배치 IC 평가 크기 (5분봉 OOM 방지) |
 | `ALPHA_FACTORY_INTERVAL_MINUTES` | `360` | 팩토리 사이클 간격 (6시간) |
 | `ALPHA_FACTORY_MAX_ITERATIONS` | `5` | 사이클당 Claude 가설 생성 횟수 |
 | `ALPHA_FACTORY_CROSSOVER_ENABLED` | `true` | 유전 교차 활성화 |
 | `ALPHA_FACTORY_TOURNAMENT_K` | `3` | 토너먼트 선택 크기 |
 | `ALPHA_FACTORY_MAX_CYCLES` | `10` | 야간 마이닝 최대 사이클 수 |
+| `ALPHA_NICHE_MAX_PCT` | `0.25` | 니치별 최대 모집단 비율 (0.25=25%, 1.0=비활성화) |
 | `CAUSAL_AUTO_VALIDATE` | `true` | 마이닝 완료 후 자동 인과 검증 |
 | `CAUSAL_PLACEBO_THRESHOLD` | `0.05` | 플라시보 검증 임계값 |
 | `CAUSAL_RANDOM_CAUSE_THRESHOLD` | `0.05` | 랜덤 원인 검증 임계값 |
@@ -571,6 +596,16 @@ docker restart stockmate-mcp      # MCP만 재시작
 | `WORKFLOW_DIVERGENCE_CHECK_ENABLED` | `true` | 다이버전스 감지 |
 | `WORKFLOW_DIVERGENCE_HALT_THRESHOLD` | `-10.0` | 누적 pnl% 자동 정지 |
 | `WORKFLOW_DIVERGENCE_WARN_THRESHOLD` | `-5.0` | 누적 pnl% 경고 |
+| `WORKFLOW_MULTI_FACTOR_COUNT` | `3` | 동시 매매 팩터 수 (1~5) |
+| `WORKFLOW_MAX_POSITIONS` | `10` | 최대 동시 포지션 수 |
+| `WORKFLOW_UNIVERSE` | `KOSPI200` | 유니버스 |
+| `WORKFLOW_DATA_INTERVAL` | `5m` | 분봉 단위 (1m/3m/5m) |
+| `ORDER_BUY_TTL_SECONDS` | `120` | 매수 미체결 TTL (초) |
+| `ORDER_SELL_TTL_SECONDS` | `90` | 매도 미체결 TTL (초) |
+| `ORDER_CANCEL_TIMEOUT_SECONDS` | `60` | 취소 확인 대기 (초) |
+| `ORDER_SELL_USE_LIMIT` | `true` | 매도 지정가 사용 여부 |
+| `OPENCLAW_HEALTH_URL` | `http://host.docker.internal:18789/health` | OpenClaw 헬스체크 URL |
+| `OPENCLAW_MAX_MEMORY_MB` | `2048` | OpenClaw 최대 메모리 |
 | `TELEGRAM_BOT_TOKEN` | — | 텔레그램 봇 토큰 |
 | `TELEGRAM_CHAT_ID` | — | 텔레그램 채팅 ID |
 | `WORKER_MODE` | `external` | 워커 모드: `inline`=단일 프로세스, `external`=API만(Worker 별도), `worker`=Worker 프로세스 |
@@ -608,7 +643,7 @@ docker restart stockmate-mcp      # MCP만 재시작
 - Continuous Aggregates: `candles_1m`, `candles_1h`, `candles_1d` (자동 갱신 정책)
 - 압축 정책 (7일), 보존 정책 (30일)
 
-**Alembic 마이그레이션 (24개):**
+**Alembic 마이그레이션 (29개):**
 1. `f6ea9be370b3` — 초기 스키마 (Account, Position, Order)
 2. `a1b2c3d4e5f6` — TimescaleDB (hypertable + continuous aggregates)
 3. `64ea2ba3255f` — stock_masters + stock_candles
@@ -631,8 +666,12 @@ docker restart stockmate-mcp      # MCP만 재시작
 20. `r0s1t2u3v4w5` — causal_failure_type
 21. `s1t2u3v4w5x6` — feedback + param 관련 컬럼
 22. `t2u3v4w5x6y7` — worker 테이블
-23. `v4w5x6y7z8a9` — telegram_message_logs 테이블
-24. `w5x6y7z8a9b0` — workflow_runs.step_status JSON 컬럼
+23. `u3v4w5x6y7z8` — collected_at 컬럼 추가
+24. `v4w5x6y7z8a9` — telegram_message_logs 테이블
+25. `w5x6y7z8a9b0` — workflow_runs.step_status JSON 컬럼
+26. `x6y7z8a9b0c1` — backtest_runs 인덱스
+27. `y7z8a9b0c1d2` — data_explorer 인덱스
+28. `z8a9b0c1d2e3` — telegram_message_registry
 
 ## REST API 엔드포인트
 
@@ -655,6 +694,9 @@ docker restart stockmate-mcp      # MCP만 재시작
 | `scheduler` | `GET /scheduler/status`, `POST /scheduler/start`, `/scheduler/stop`, `POST /scheduler/trigger` | 일일 배치 스케줄러 |
 | `workflow` | `GET /workflow/status`, `POST /workflow/trigger`, `GET /workflow/history`, `/workflow/events/{run_id}`, `/workflow/best-factors` | 워크플로우 FSM |
 | `telegram` | `GET /telegram/logs` | 텔레그램 발송 내역 조회 (카테고리/상태 필터, 페이지네이션) |
+| `data_explorer` | `GET /data-explorer/coverage`, `/data-explorer/gaps`, `/data-explorer/{table}` | 데이터 커버리지 감사/분석 |
+| `sim_replay` | `GET /sim-replay/{id}`, `POST /sim-replay/compare` | 시뮬레이션 리플레이/비교 |
+| `system` | `GET /system/status`, `/system/map` | 시스템 상태/아키텍처 맵 |
 | `ws` | `WS /ws/{symbol}` | 실시간 틱/호가 WebSocket |
 
 ## AI 에이전트 시스템
@@ -1130,7 +1172,7 @@ DB 영속 모집단 기반 진화 엔진. `miner.py`의 `EvolutionaryAlphaMiner`
 - [x] 프로젝트 기반 구조 (프론트/백/데이터펌프 스캐폴딩)
 - [x] 디자인 시스템 색상 확정 및 주입
 - [x] Docker (FastAPI + TimescaleDB)
-- [x] DB 모델 + Alembic 마이그레이션 (24개 버전)
+- [x] DB 모델 + Alembic 마이그레이션 (29개 버전)
 - [x] 문서 (CLAUDE.md, ARCHITECTURE.md)
 
 **Data Pump**
@@ -1311,3 +1353,22 @@ DB 영속 모집단 기반 진화 엔진. `miner.py`의 `EvolutionaryAlphaMiner`
 - [ ] 매수 없이 매도 버그 근본 원인 (중복 봉 처리 — 디버깅 로그 심어둠, 다음 장에서 확인)
 - [ ] 워크플로우 수동 트리거 의미론 정의 (스텝별 기대 동작 설계)
 - [ ] 보유 포지션/자산 현황 UI 개선 (자동매매, 워크플로우)
+
+**알파 마이닝 개선 (2026-03-19)**
+- [x] Round 1: Niche-Based Population Diversity Cap
+  - 8개 피처 패밀리 분류 체계 (classify_niche)
+  - 모집단 트리밍에 니치캡 적용 (ALPHA_NICHE_MAX_PCT=0.25)
+  - 개선 히스토리: docs/ALPHA_MINING_IMPROVEMENTS.md
+
+**데이터 탐색기 + 시스템 맵 (2026-03-16~18)**
+- [x] DataExplorerPage — 데이터 커버리지 감사 대시보드 (11개 컴포넌트)
+- [x] SystemMapPage — 시스템 아키텍처/상태 시각화
+- [x] SimReplayPage — 시뮬레이션 리플레이/분석
+- [x] REST API: data_explorer, sim_replay, system 라우터 3개
+
+**매매 엔진 강화 (2026-03-16~18)**
+- [x] order_manager.py — 주문 생명주기 관리 (TTL, 취소, 재주문)
+- [x] sim_engine.py — 모의 체결 엔진 (KIS 모의투자 대체)
+- [x] log_writer.py — 매매 로그 DB 기록
+- [x] tick_size.py — 호가 단위 계산
+- [x] Gemini API 통합 (google-genai, config 추가)
