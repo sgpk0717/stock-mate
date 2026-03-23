@@ -554,7 +554,8 @@ docker restart stockmate-mcp      # MCP만 재시작
 | `ALPHA_POPULATION_SIZE` | `100` | 진화 엔진 모집단 크기 (5분봉 OOM 방지, 점진적 증가) |
 | `ALPHA_ELITE_PCT` | `0.05` | 엘리트 보존 비율 |
 | `ALPHA_AST_MUTATION_RATIO` | `0.92` | AST 연산자 비율 |
-| `ALPHA_LLM_MUTATION_RATIO` | `0.08` | LLM 연산자 비율 (Claude "doping") |
+| `ALPHA_LLM_MUTATION_RATIO` | `0.08` | LLM 연산자 비율 (Gemini/Claude "doping") |
+| `ALPHA_LLM_PROVIDER` | `gemini` | 팩토리 LLM 프로바이더 (`gemini` 저비용 / `anthropic` 고비용) |
 | `ALPHA_LLM_MAX_CONCURRENT` | `20` | LLM 동시 호출 수 (Tier 3 기준) |
 | `ALPHA_LLM_RETRY_MAX` | `2` | 429/timeout 최대 재시도 |
 | `ALPHA_EVAL_BATCH_SIZE` | `5` | 배치 IC 평가 크기 (5분봉 OOM 방지) |
